@@ -1,9 +1,10 @@
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, join_room, emit
 import random
+import os
 
 app = Flask(__name__)
-socketio = SocketIO(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Room and player data
 rooms = {}
@@ -12,8 +13,7 @@ ROLES = ["King", "Police", "Robber", "Thief"]
 
 @app.route("/")
 def index():
-    return render_template("index.html")
-
+    return "Server is running!"
 
 @socketio.on("create_room")
 def create_room(data):
@@ -23,7 +23,6 @@ def create_room(data):
     else:
         rooms[room_code] = {"players": {}, "scores": {}, "turns": 0}
         emit("room_created", {"room_code": room_code})
-
 
 @socketio.on("join_room")
 def join_room_event(data):
@@ -41,8 +40,10 @@ def join_room_event(data):
     rooms[room_code]["players"][username] = None
     rooms[room_code]["scores"][username] = 0
     join_room(room_code)
-    emit("player_joined", {"username": username, "players": list(rooms[room_code]["players"].keys())}, to=room_code)
-
+    emit("player_joined", {
+        "username": username, 
+        "players": list(rooms[room_code]["players"].keys())
+    }, to=room_code)
 
 @socketio.on("start_game")
 def start_game(data):
@@ -53,7 +54,6 @@ def start_game(data):
 
     start_turn(room_code)
 
-
 def start_turn(room_code):
     players = list(rooms[room_code]["players"].keys())
     random.shuffle(players)
@@ -62,8 +62,10 @@ def start_turn(room_code):
     rooms[room_code]["players"] = roles
     rooms[room_code]["turns"] += 1
 
-    emit("new_turn", {"roles": roles, "turns": rooms[room_code]["turns"]}, to=room_code)
-
+    emit("new_turn", {
+        "roles": roles, 
+        "turns": rooms[room_code]["turns"]
+    }, to=room_code)
 
 @socketio.on("guess_roles")
 def guess_roles(data):
@@ -81,7 +83,8 @@ def guess_roles(data):
         rooms[room_code]["scores"][robber] += 60
         rooms[room_code]["scores"][thief] += 40
 
-    rooms[room_code]["scores"][[player for player, role in roles.items() if role == "King"][0]] += 100
+    king = [player for player, role in roles.items() if role == "King"][0]
+    rooms[room_code]["scores"][king] += 100
 
     emit("update_scores", {"scores": rooms[room_code]["scores"]}, to=room_code)
 
@@ -91,6 +94,6 @@ def guess_roles(data):
     else:
         start_turn(room_code)
 
-
 if __name__ == "__main__":
-    socketio.run(app, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    socketio.run(app, host="0.0.0.0", port=port)
