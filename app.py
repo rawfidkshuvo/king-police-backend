@@ -1,19 +1,10 @@
-from flask import Flask, render_template, request
-from flask_socketio import SocketIO, join_room, emit
-import random
-import os
-
-app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
-
 # Room and player data
 rooms = {}
-
 ROLES = ["King", "Police", "Robber", "Thief"]
 
 @app.route("/")
-def index():
-    return "Server is running!"
+def home():
+    return render_template("index.html")
 
 @socketio.on("create_room")
 def create_room(data):
@@ -40,8 +31,7 @@ def join_room_event(data):
     rooms[room_code]["players"][username] = None
     rooms[room_code]["scores"][username] = 0
     join_room(room_code)
-    
-    # Check if the room has 4 players to start the game automatically
+
     if len(rooms[room_code]["players"]) == 4:
         emit("game_starting", {"message": "Game is starting!"}, to=room_code)
         start_game({"room_code": room_code})
@@ -60,37 +50,40 @@ def start_game(data):
 
     start_turn(room_code)
 
+@socketio.on("start_turn")
 def start_turn(room_code):
     players = list(rooms[room_code]["players"].keys())
     random.shuffle(players)
     roles = dict(zip(players, ROLES))
-
     rooms[room_code]["players"] = roles
     rooms[room_code]["turns"] += 1
 
+    # Emit the roles to the frontend
     emit("new_turn", {
-        "roles": roles, 
+        "roles": roles,
         "turns": rooms[room_code]["turns"]
     }, to=room_code)
 
+    # After roles are assigned, show the guessing button (or the next game phase)
+    emit("show_guess_button", {}, to=room_code)
 
 @socketio.on("guess_roles")
 def guess_roles(data):
     room_code = data["room_code"]
     police_guess = data["police_guess"]
-
     roles = rooms[room_code]["players"]
-    police = [player for player, role in roles.items() if role == "Police"][0]
-    robber = [player for player, role in roles.items() if role == "Robber"][0]
-    thief = [player for player, role in roles.items() if role == "Thief"][0]
 
-    if police_guess == {"Robber": robber, "Thief": thief}:
+    police = get_player_by_role(roles, "Police")
+    robber = get_player_by_role(roles, "Robber")
+    thief = get_player_by_role(roles, "Thief")
+
+    if police_guess == {"Robber": robber}:
         rooms[room_code]["scores"][police] += 80
     else:
         rooms[room_code]["scores"][robber] += 60
         rooms[room_code]["scores"][thief] += 40
 
-    king = [player for player, role in roles.items() if role == "King"][0]
+    king = get_player_by_role(roles, "King")
     rooms[room_code]["scores"][king] += 100
 
     emit("update_scores", {"scores": rooms[room_code]["scores"]}, to=room_code)
@@ -101,6 +94,12 @@ def guess_roles(data):
     else:
         start_turn(room_code)
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, host="0.0.0.0", port=port)
+@socketio.on("restart_game")
+def restart_game(data):
+    room_code = data["room_code"]
+    rooms[room_code]["turns"] = 0
+    rooms[room_code]["scores"] = {player: 0 for player in rooms[room_code]["players"]}
+    start_turn(room_code)
+
+def get_player_by_role(roles, role_name):
+    return [player for player, role in roles.items() if role == role_name][0]
