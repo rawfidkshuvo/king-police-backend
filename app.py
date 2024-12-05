@@ -1,3 +1,11 @@
+from flask import Flask, request, render_template
+from flask_socketio import SocketIO, join_room, emit
+import random
+import os
+
+app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*")
+
 # Room and player data
 rooms = {}
 ROLES = ["King", "Police", "Robber", "Thief"]
@@ -103,3 +111,7 @@ def restart_game(data):
 
 def get_player_by_role(roles, role_name):
     return [player for player, role in roles.items() if role == role_name][0]
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    socketio.run(app, host="0.0.0.0", port=port)
