@@ -87,6 +87,7 @@ def guess_roles(data):
 
     if police_guess == {"Robber": robber}:
         rooms[room_code]["scores"][police] += 80
+        rooms[room_code]["scores"][thief] += 40
     else:
         rooms[room_code]["scores"][robber] += 60
         rooms[room_code]["scores"][thief] += 40
@@ -96,7 +97,7 @@ def guess_roles(data):
 
     emit("update_scores", {"scores": rooms[room_code]["scores"]}, to=room_code)
 
-    if rooms[room_code]["turns"] >= 5:  # End after 5 turns
+    if rooms[room_code]["turns"] >= 20:  # End after 5 turns
         winner = max(rooms[room_code]["scores"], key=rooms[room_code]["scores"].get)
         emit("game_over", {"winner": winner, "scores": rooms[room_code]["scores"]}, to=room_code)
     else:
